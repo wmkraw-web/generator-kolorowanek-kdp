@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kreator Kolorowanek KDP</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- React i ReactDOM -->
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+    <!-- Babel -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+</head>
+<body class="bg-amber-50 text-slate-900 font-sans">
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useRef, useEffect } = React;
+
+        // Ikony
+        const IconPalette = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/></svg>;
+        const IconDownload = () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>;
+        const IconCoffee = () => <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 8h1a4 4 0 1 1 0 8h-1"/><path d="M3 8h14v9a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4Z"/><line x1="6" x2="6" y1="2" y2="4"/><line x1="10" x2="10" y1="2" y2="4"/><line x1="14" x2="14" y1="2" y2="4"/></svg>;
+        const IconLoader = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="animate-spin"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>;
+        const IconPrinter = () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect width="12" height="8" x="6" y="14"/></svg>;
+
+        const App = () => {
+            const canvasRef = useRef(null);
+            
+            const [prompt, setPrompt] = useState('');
+            const [complexity, setComplexity] = useState('simple'); // simple, detailed
+            const [image, setImage] = useState(null); 
+            const [isGenerating, setIsGenerating] = useState(false);
+            const [error, setError] = useState(null);
+
+            // GŁÓWNA FUNKCJA RYSOWANIA (A4 Proporcje)
+            const drawCanvas = () => {
+                const canvas = canvasRef.current;
+                if (!canvas) return;
+                const ctx = canvas.getContext('2d');
+                
+                // Wymiary proporcjonalne do A4 (np. 1200 x 1697)
+                const width = canvas.width;
+                const height = canvas.height;
+
+                // Tło białe dla drukarki
+                ctx.fillStyle = "#ffffff";
+                ctx.fillRect(0, 0, width, height);
+
+                if (image) {
+                    // Wyśrodkowanie z marginesem
+                    const margin = 40;
+                    const drawWidth = width - (margin * 2);
+                    const drawHeight = drawWidth * (image.height / image.width);
+                    
+                    const x = margin;
+                    const y = (height - drawHeight) / 2;
+
+                    ctx.drawImage(image, x, y, drawWidth, drawHeight);
+                } else {
+                    ctx.fillStyle = '#cbd5e1';
+                    ctx.font = '24px sans-serif';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText("Tutaj pojawi się Twoja kolorowanka", width / 2, height / 2);
+                }
+            };
+
+            useEffect(() => {
+                drawCanvas();
+            }, [image]);
+
+            // GENEROWANIE KOLOROWANKI
+            const generateColoringPage = async () => {
+                if (!prompt.trim()) {
+                    setError("Wpisz najpierw, co sztuczna inteligencja ma narysować!");
+                    return;
+                }
+
+                setIsGenerating(true);
+                setError(null);
+
+                // TAJNY PROMPT DLA AI: Wymuszamy czarno-białą kolorowankę
+                const complexityInstruction = complexity === 'simple' ? 'very simple, thick bold outlines, minimal details, suitable for toddlers' : 'detailed, fine outlines, intricate patterns, suitable for adults';
+                
+                const enhancedPrompt = `${prompt}, black and white line art, coloring book page style, clean white background, strictly black lines, no shading, no greyscale, no colors, ${complexityInstruction}`;
+                const encodedPrompt = encodeURIComponent(enhancedPrompt);
+                const seed = Math.floor(Math.random() * 1000000);
+                
+                // Używamy darmowego silnika
+                const imageUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=800&height=1000&nologo=true&seed=${seed}`;
+
+                try {
+                    const response = await fetch(imageUrl);
+                    if (!response.ok) throw new Error("Błąd serwera");
+                    
+                    const blob = await response.blob();
+                    const objectUrl = URL.createObjectURL(blob);
+
+                    const img = new Image();
+                    img.onload = () => {
+                        setImage(img);
+                        setIsGenerating(false);
+                    };
+                    img.onerror = () => {
+                        setError("Błąd wczytywania obrazka.");
+                        setIsGenerating(false);
+                    };
+                    img.src = objectUrl;
+                } catch (err) {
+                    setError("Serwer jest mocno obciążony. Kliknij 'Generuj' jeszcze raz!");
+                    setIsGenerating(false);
+                }
+            };
+
+            const handleDownload = () => {
+                const canvas = canvasRef.current;
+                if (!canvas || !image) {
+                    setError("Wygeneruj obrazek przed pobraniem.");
+                    return;
+                }
+                const dataUrl = canvas.toDataURL('image/png');
+                const link = document.createElement('a');
+                link.download = `kolorowanka-${prompt.replace(/\s+/g, '-').toLowerCase()}.png`;
+                link.href = dataUrl;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            };
+
+            const handlePrint = () => {
+                if (!image) {
+                    setError("Wygeneruj obrazek przed drukiem.");
+                    return;
+                }
+                const dataUrl = canvasRef.current.toDataURL('image/png');
+                const printWindow = window.open('', '_blank');
+                printWindow.document.write(`
+                    <html>
+                        <head><title>Drukuj Kolorowankę</title></head>
+                        <body style="margin:0;display:flex;justify-content:center;align-items:center;height:100vh;">
+                            <img src="${dataUrl}" style="max-width:100%;max-height:100vh;"/>
+                        </body>
+                    </html>
+                `);
+                printWindow.document.close();
+                printWindow.focus();
+                setTimeout(() => {
+                    printWindow.print();
+                    printWindow.close();
+                }, 250);
+            };
+
+            return (
+                <div className="min-h-screen p-4 md:p-8 max-w-7xl mx-auto flex flex-col md:flex-row gap-8">
+                    
+                    {/* LEWY PANEL - Kontrolki */}
+                    <div className="w-full md:w-1/3 flex flex-col gap-6">
+                        <div className="bg-white p-6 rounded-3xl shadow-lg border border-amber-100">
+                            <div className="flex items-center gap-3 mb-2">
+                                <div className="p-3 bg-amber-500 rounded-xl text-white">
+                                    <IconPalette />
+                                </div>
+                                <h1 className="text-2xl font-black text-slate-800 tracking-tight">KDP ColorAI</h1>
+                            </div>
+                            <p className="text-sm text-slate-500 mb-6 font-medium">Twórz profesjonalne kolorowanki do sprzedaży na Amazon KDP lub do domowego druku.</p>
+
+                            {error && (
+                                <div className="bg-red-50 text-red-600 p-3 rounded-xl text-sm font-medium mb-4 flex items-center gap-2">
+                                    <span>⚠️</span> {error}
+                                </div>
+                            )}
+
+                            <div className="space-y-5">
+                                <div className="space-y-2">
+                                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Co chcesz narysować?</label>
+                                    <textarea 
+                                        rows="3"
+                                        value={prompt}
+                                        onChange={(e) => setPrompt(e.target.value)}
+                                        placeholder="np. uroczy piesek jadący na rowerze przez las"
+                                        className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-amber-500 bg-slate-50 outline-none resize-none"
+                                    />
+                                </div>
+
+                                <div className="space-y-2">
+                                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Poziom skomplikowania</label>
+                                    <div className="flex bg-slate-100 p-1 rounded-xl">
+                                        <button 
+                                            onClick={() => setComplexity('simple')}
+                                            className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all ${complexity === 'simple' ? 'bg-white shadow text-amber-600' : 'text-slate-500 hover:text-slate-700'}`}
+                                        >
+                                            Dla Dzieci (Proste)
+                                        </button>
+                                        <button 
+                                            onClick={() => setComplexity('detailed')}
+                                            className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all ${complexity === 'detailed' ? 'bg-white shadow text-amber-600' : 'text-slate-500 hover:text-slate-700'}`}
+                                        >
+                                            Dla Dorosłych (Detale)
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <button 
+                                    onClick={generateColoringPage}
+                                    disabled={isGenerating || !prompt.trim()}
+                                    className="w-full flex justify-center items-center gap-2 bg-amber-500 hover:bg-amber-600 disabled:bg-slate-300 text-white py-4 rounded-xl font-bold text-lg transition-all shadow-lg shadow-amber-500/30"
+                                >
+                                    {isGenerating ? <><IconLoader /> Rysowanie...</> : "Generuj Kolorowankę"}
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Moduł "Zarabiania" / Monetyzacji (Przykład) */}
+                        <div className="bg-slate-800 p-6 rounded-3xl text-white shadow-xl relative overflow-hidden">
+                            <div className="absolute -right-6 -top-6 w-24 h-24 bg-indigo-500 rounded-full blur-2xl opacity-40"></div>
+                            <h3 className="font-bold text-lg mb-2">Pamiętaj!</h3>
+                            <p className="text-sm text-slate-300 mb-4">Możesz pobrać ten obrazek w wysokiej rozdzielczości i sprzedać jako zeszyt na Amazon KDP.</p>
+                            
+                            <div className="bg-slate-700/50 border border-slate-600 rounded-xl p-4">
+                                <p className="text-xs text-slate-400 mb-2 uppercase font-bold tracking-wider text-center">Przykład Monetyzacji Aplikacji:</p>
+                                <button className="w-full flex items-center justify-center gap-2 bg-[#ffdd00] hover:bg-[#e6c700] text-black py-2.5 rounded-lg font-bold text-sm transition-colors">
+                                    <IconCoffee /> Postaw twórcy kawę
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* PRAWY PANEL - Płótno A4 */}
+                    <div className="w-full md:w-2/3 flex flex-col items-center">
+                        
+                        {/* Pasek narzędzi nad obrazkiem */}
+                        <div className="w-full max-w-lg flex justify-between items-center mb-4 px-2">
+                            <h2 className="font-bold text-slate-700">Podgląd (Proporcje A4)</h2>
+                            <div className="flex gap-2">
+                                <button onClick={handlePrint} disabled={!image} className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-200 hover:bg-slate-300 disabled:opacity-50 text-slate-700 font-bold rounded-lg text-sm transition-colors">
+                                    <IconPrinter /> Drukuj
+                                </button>
+                                <button onClick={handleDownload} disabled={!image} className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-100 hover:bg-amber-200 disabled:opacity-50 text-amber-800 font-bold rounded-lg text-sm transition-colors">
+                                    <IconDownload /> Pobierz PNG
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Płótno naśladujące kartkę A4 */}
+                        <div className="relative group shadow-2xl rounded-sm overflow-hidden border border-slate-200 bg-white" style={{ width: '100%', maxWidth: '500px', aspectRatio: '1 / 1.414' }}>
+                            {isGenerating && (
+                                <div className="absolute inset-0 z-20 bg-white/90 flex flex-col items-center justify-center">
+                                    <div className="text-amber-500 mb-3"><IconLoader /></div>
+                                    <p className="font-bold text-slate-800">Sztuczna inteligencja przygotowuje szkic...</p>
+                                    <p className="text-xs text-slate-500 mt-1">Dbamy o ostre kontury i czyste tło</p>
+                                </div>
+                            )}
+                            {/* Wyższa rozdzielczość canvasu dla dobrego eksportu, pomniejszona wizualnie w CSS */}
+                            <canvas 
+                                ref={canvasRef} 
+                                width={1200} 
+                                height={1697} 
+                                className="w-full h-full object-contain"
+                            ></canvas>
+                        </div>
+                        <p className="text-xs text-slate-400 mt-4 text-center max-w-md">Wygenerowane obrazy są czarno-białe i zoptymalizowane pod drukarki. Możesz bez obaw używać ich komercyjnie.</p>
+                    </div>
+
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
