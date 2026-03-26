@@ -5,16 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Kreator Kolorowanek KDP Pro</title>
     
-    <!-- Aktywacja ikony aplikacji -->
     <link rel="icon" type="image/png" href="icon.png">
     <link rel="apple-touch-icon" href="icon.png">
 
-    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- React i ReactDOM -->
     <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
-    <!-- Babel -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 </head>
 <body class="bg-amber-50 text-slate-900 font-sans">
@@ -50,16 +46,13 @@
                 localStorage.setItem('hf_api_token', val);
             };
 
-            // GŁÓWNA FUNKCJA RYSOWANIA NA PŁÓTNIE
             const drawCanvas = () => {
                 const canvas = canvasRef.current;
                 if (!canvas) return;
                 const ctx = canvas.getContext('2d');
-                
                 const width = canvas.width;
                 const height = canvas.height;
 
-                // Tło białe (niezbędne do druku)
                 ctx.fillStyle = "#ffffff";
                 ctx.fillRect(0, 0, width, height);
 
@@ -67,10 +60,8 @@
                     const margin = 40;
                     const drawWidth = width - (margin * 2);
                     const drawHeight = drawWidth * (image.height / image.width);
-                    
                     const x = margin;
                     const y = (height - drawHeight) / 2;
-
                     ctx.drawImage(image, x, y, drawWidth, drawHeight);
                 } else {
                     ctx.fillStyle = '#cbd5e1';
@@ -85,9 +76,9 @@
                 drawCanvas();
             }, [image]);
 
-            // OFICJALNE POŁĄCZENIE Z HUGGING FACE API (Stabilny, Profesjonalny Serwer SDXL)
-            const fetchImageFromHuggingFace = async (promptText, maxRetries = 3) => {
-                const hfEndpoint = "https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-xl-base-1.0";
+            // OFICJALNE POŁĄCZENIE Z HUGGING FACE API (Silnik FLUX.1-schnell)
+            const fetchImageFromHuggingFace = async (promptText, maxRetries = 2) => {
+                const hfEndpoint = "https://api-inference.huggingface.co/models/black-forest-labs/FLUX.1-schnell";
                 
                 for (let i = 0; i < maxRetries; i++) {
                     setRetryCount(i);
@@ -100,19 +91,21 @@
                             },
                             body: JSON.stringify({ 
                                 inputs: promptText,
+                                parameters: { num_inference_steps: 4 } 
                             }),
                         });
 
-                        // Kod 503 oznacza, że model na darmowym serwerze się "budzi"
                         if (response.status === 503) {
-                            console.log("Model ładuje się, czekam 8 sekund...");
-                            await new Promise(r => setTimeout(r, 8000));
+                            console.log("Model ładuje się, czekam 5 sekund...");
+                            await new Promise(r => setTimeout(r, 5000));
                             continue;
                         }
 
                         if (!response.ok) {
-                            if (response.status === 401) {
-                                throw new Error("Błąd 401: Podany klucz Hugging Face jest nieprawidłowy lub zablokowany.");
+                            const errText = await response.text();
+                            console.error("HF Error Details:", errText);
+                            if (response.status === 401 || response.status === 403) {
+                                throw new Error("Klucz nieprawidłowy lub brak mu uprawnień 'Inference'. Upewnij się, że zaznaczyłeś 'Make calls to the serverless Inference API' na koncie HF.");
                             }
                             throw new Error(`Błąd serwera API (Kod: ${response.status})`);
                         }
@@ -130,13 +123,16 @@
                         return img; 
 
                     } catch (err) {
-                        if (i === maxRetries - 1 || err.message.includes("401")) throw err; 
+                        if (err.message === "Failed to fetch" || err.message.includes("NetworkError")) {
+                            throw new Error("🚨 BLOKADA SIECI (Failed to fetch). \n1. Twój klucz HF prawdopodobnie nie ma uprawnień. \n2. Wyłącz wtyczkę AdBlock/uBlock dla tej strony.");
+                        }
+                        
+                        if (i === maxRetries - 1 || err.message.includes("uprawnień")) throw err; 
                         await new Promise(res => setTimeout(res, 3000));
                     }
                 }
             };
 
-            // GENEROWANIE KOLOROWANKI
             const generateColoringPage = async () => {
                 if (!hfToken || !hfToken.startsWith('hf_')) {
                     setError("Wklej poprawny darmowy klucz Hugging Face (powinien zaczynać się od hf_...)");
@@ -151,12 +147,12 @@
                 setError(null);
                 setRetryCount(0);
 
-                // PROMPT DLA SDXL (Stabilne tworzenie line-artu)
+                // PROMPT DLA FLUXA
                 const complexityInstruction = complexity === 'simple' ? 'very simple, bold thick outlines, minimal details, suitable for toddlers' : 'highly detailed, fine thin outlines, intricate patterns, suitable for adults';
                 const enhancedPrompt = `detailed black and white line art coloring page, no shading, strict white background, clean black outlines, ${complexityInstruction}, ${prompt}`;
 
                 try {
-                    const finalImage = await fetchImageFromHuggingFace(enhancedPrompt, 3);
+                    const finalImage = await fetchImageFromHuggingFace(enhancedPrompt, 2);
                     setImage(finalImage);
                 } catch (err) {
                     setError(err.message || "Błąd generowania. Upewnij się, że masz połączony internet i poprawny klucz HF.");
@@ -216,11 +212,11 @@
                                 </div>
                                 <h1 className="text-2xl font-black text-slate-800 tracking-tight">KDP ColorAI</h1>
                             </div>
-                            <p className="text-sm text-slate-500 mb-6 font-medium">Potężny, bezawaryjny kreator napędzany przez Hugging Face.</p>
+                            <p className="text-sm text-slate-500 mb-6 font-medium">Potężny kreator z silnikiem FLUX.1-schnell od Hugging Face.</p>
 
                             {error && (
-                                <div className="bg-red-50 text-red-600 p-3 rounded-xl text-sm font-medium mb-4 flex items-start gap-2 border border-red-100 shadow-sm">
-                                    <span className="text-lg mt-0.5">⚠️</span> <span className="flex-1">{error}</span>
+                                <div className="bg-red-50 text-red-600 p-4 rounded-xl text-sm font-medium mb-4 flex items-start gap-2 border border-red-100 shadow-sm whitespace-pre-wrap">
+                                    <span className="text-lg mt-0.5">⚠️</span> <span className="flex-1 leading-relaxed">{error}</span>
                                 </div>
                             )}
 
@@ -235,12 +231,13 @@
                                     value={hfToken} 
                                     onChange={saveToken} 
                                     placeholder="Wklej darmowy klucz hf_..." 
-                                    className="w-full px-4 py-2 border border-indigo-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-indigo-500 font-mono bg-white"
+                                    className="w-full px-4 py-2 border border-indigo-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-indigo-500 font-mono bg-white shadow-sm"
                                 />
-                                <a href="https://huggingface.co/settings/tokens" target="_blank" className="text-[11px] text-indigo-600 hover:text-indigo-800 hover:underline font-bold mt-1">
-                                    &rarr; Kliknij tutaj, utwórz darmowe konto i odbierz klucz ("Read")
-                                </a>
-                                <p className="text-[10px] text-indigo-400 font-medium">Klucz zapisuje się bezpiecznie w Twojej przeglądarce.</p>
+                                <div className="text-[11px] text-indigo-700 mt-1 space-y-1">
+                                    <p>1. Wejdź na <a href="https://huggingface.co/settings/tokens" target="_blank" className="font-bold underline">Ustawienia Tokenów</a></p>
+                                    <p>2. Utwórz <b>Fine-grained token</b></p>
+                                    <p>3. Koniecznie zaznacz opcję dotyczącą <b>Wnioskowania</b> ("Make calls to the serverless Inference API")</p>
+                                </div>
                             </div>
 
                             <div className="space-y-5">
@@ -283,14 +280,13 @@
                             </div>
                         </div>
 
-                        {/* MODUŁ "ZARABIANIA" / NAPIWKÓW */}
+                        {/* MODUŁ NAPIWKÓW */}
                         <div className="bg-slate-800 p-6 rounded-3xl text-white shadow-xl relative overflow-hidden mt-auto hidden md:block">
                             <div className="absolute -right-6 -top-6 w-24 h-24 bg-amber-500 rounded-full blur-2xl opacity-20"></div>
                             <h3 className="font-bold text-lg mb-2 relative z-10">Wspieraj projekt!</h3>
                             <p className="text-sm text-slate-300 mb-4 relative z-10">Ta aplikacja jest darmowa. Ufunduj mi wirtualną kawę!</p>
                             
                             <div className="bg-slate-700/80 backdrop-blur border border-slate-600 rounded-xl p-4 relative z-10">
-                                {/* ZMIEŃ TEN LINK PONIŻEJ NA SWÓJ LINK BUYCOFFEE */}
                                 <a 
                                     href="https://buycoffee.to/TWOJA_NAZWA" 
                                     target="_blank"
@@ -324,9 +320,9 @@
                                     <div className="text-amber-500 mb-3"><IconLoader /></div>
                                     <p className="font-bold text-slate-800 text-center">Magia Hugging Face w toku...</p>
                                     {retryCount > 0 ? (
-                                        <p className="text-xs text-amber-600 mt-2 font-bold px-4 text-center">Darmowy model SDXL się wybudza (to może zająć 10-15 sekund)...</p>
+                                        <p className="text-xs text-amber-600 mt-2 font-bold px-4 text-center">Darmowy model Flux się wybudza...</p>
                                     ) : (
-                                        <p className="text-xs text-slate-500 mt-1">Szkicowanie czystych konturów</p>
+                                        <p className="text-xs text-slate-500 mt-1">Szkicowanie czystych konturów (trwa ok. 5 sek)</p>
                                     )}
                                 </div>
                             )}
@@ -337,20 +333,6 @@
                                 className="w-full h-full object-contain"
                             ></canvas>
                         </div>
-                        
-                        {/* Wersja mobilna modułu napiwków na dole */}
-                        <div className="w-full mt-8 md:hidden">
-                            <div className="bg-slate-800 p-6 rounded-3xl text-white shadow-xl relative overflow-hidden">
-                                <div className="absolute -right-6 -top-6 w-24 h-24 bg-amber-500 rounded-full blur-2xl opacity-20"></div>
-                                <h3 className="font-bold text-lg mb-2 relative z-10">Wspieraj projekt!</h3>
-                                <div className="bg-slate-700/80 backdrop-blur border border-slate-600 rounded-xl p-4 relative z-10">
-                                    <a href="https://buycoffee.to/TWOJA_NAZWA" target="_blank" rel="noopener noreferrer" className="w-full flex items-center justify-center gap-2 bg-[#ffdd00] hover:bg-[#e6c700] text-black py-2.5 rounded-lg font-bold text-sm transition-colors shadow-md">
-                                        <IconCoffee /> Postaw twórcy kawę
-                                    </a>
-                                </div>
-                            </div>
-                        </div>
-
                     </div>
 
                 </div>
