@@ -3,260 +3,198 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Kreator Kolorowanek KDP Pro</title>
-    
-    <link rel="icon" type="image/png" href="icon.png">
-    <link rel="apple-touch-icon" href="icon.png">
-
+    <title>KDP ColorAI - Generator Kolorowanek</title>
+    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- React i ReactDOM -->
     <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+    <!-- Babel -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 </head>
 <body class="bg-amber-50 text-slate-900 font-sans">
     <div id="root"></div>
 
     <script type="text/babel">
-        const { useState, useRef, useEffect } = React;
+        const { useState, useEffect } = React;
 
+        // Ikony SVG
         const IconPalette = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/></svg>;
         const IconDownload = () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>;
         const IconCoffee = () => <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 8h1a4 4 0 1 1 0 8h-1"/><path d="M3 8h14v9a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4Z"/><line x1="6" x2="6" y1="2" y2="4"/><line x1="10" x2="10" y1="2" y2="4"/><line x1="14" x2="14" y1="2" y2="4"/></svg>;
         const IconLoader = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="animate-spin"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>;
         const IconPrinter = () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect width="12" height="8" x="6" y="14"/></svg>;
-        const IconLock = () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>;
 
         const App = () => {
-            const canvasRef = useRef(null);
-            const [hfToken, setHfToken] = useState(() => localStorage.getItem('hf_api_token') || '');
             const [prompt, setPrompt] = useState('');
             const [complexity, setComplexity] = useState('simple'); 
-            const [image, setImage] = useState(null); 
+            const [imageUrl, setImageUrl] = useState(null); 
             const [isGenerating, setIsGenerating] = useState(false);
-            const [retryCount, setRetryCount] = useState(0); 
             const [error, setError] = useState(null);
 
-            const saveToken = (e) => {
-                const val = e.target.value.trim();
-                setHfToken(val);
-                localStorage.setItem('hf_api_token', val);
-            };
-
-            const drawCanvas = () => {
-                const canvas = canvasRef.current;
-                if (!canvas) return;
-                const ctx = canvas.getContext('2d');
-                const width = canvas.width;
-                const height = canvas.height;
-
-                ctx.fillStyle = "#ffffff";
-                ctx.fillRect(0, 0, width, height);
-
-                if (image) {
-                    const margin = 40;
-                    const drawWidth = width - (margin * 2);
-                    const drawHeight = drawWidth * (image.height / image.width);
-                    const x = margin;
-                    const y = (height - drawHeight) / 2;
-                    ctx.drawImage(image, x, y, drawWidth, drawHeight);
-                } else {
-                    ctx.fillStyle = '#cbd5e1';
-                    ctx.font = '24px sans-serif';
-                    ctx.textAlign = 'center';
-                    ctx.textBaseline = 'middle';
-                    ctx.fillText("Tutaj pojawi się Twoja kolorowanka", width / 2, height / 2);
-                }
-            };
-
-            useEffect(() => {
-                drawCanvas();
-            }, [image]);
-
-            // OFICJALNE POŁĄCZENIE Z HUGGING FACE API (Stabilny model 2.1)
-            const fetchImageFromHuggingFace = async (promptText, maxRetries = 2) => {
-                const hfEndpoint = "https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-2-1";
-                
-                for (let i = 0; i < maxRetries; i++) {
-                    setRetryCount(i);
-                    try {
-                        const response = await fetch(hfEndpoint, {
-                            method: "POST",
-                            mode: 'cors', // Wymuszenie trybu CORS
-                            headers: {
-                                "Authorization": `Bearer ${hfToken.trim()}`,
-                                "Content-Type": "application/json",
-                            },
-                            body: JSON.stringify({ 
-                                inputs: promptText,
-                                options: { wait_for_model: true } // Czeka aż darmowy serwer się wybudzi
-                            }),
-                        });
-
-                        if (response.status === 503) {
-                            await new Promise(r => setTimeout(r, 8000));
-                            continue;
-                        }
-
-                        if (!response.ok) {
-                            if (response.status === 401) throw new Error("Błędny KLUCZ API. Wygeneruj token typu CLASSIC (Read) na stronie Hugging Face.");
-                            throw new Error(`Serwer AI zajęty (Kod: ${response.status})`);
-                        }
-
-                        const blob = await response.blob();
-                        const objectUrl = URL.createObjectURL(blob);
-                        
-                        const img = new Image();
-                        await new Promise((resolve, reject) => {
-                            img.onload = () => resolve(img);
-                            img.onerror = () => reject(new Error("Błąd wyświetlania obrazka"));
-                            img.src = objectUrl;
-                        });
-
-                        return img; 
-
-                    } catch (err) {
-                        if (err.message === "Failed to fetch") {
-                            throw new Error("PRZEGLĄDARKA BLOKUJE POŁĄCZENIE. \n1. Wyłącz AdBlocka. \n2. Upewnij się, że używasz klucza CLASSIC.");
-                        }
-                        if (i === maxRetries - 1) throw err; 
-                        await new Promise(res => setTimeout(res, 3000));
-                    }
-                }
-            };
-
-            const generateColoringPage = async () => {
-                if (!hfToken || !hfToken.startsWith('hf_')) {
-                    setError("Wklej darmowy klucz Hugging Face (zaczyna się od hf_...)");
-                    return;
-                }
+            // FUNKCJA GENEROWANIA
+            const generateColoringPage = () => {
                 if (!prompt.trim()) {
-                    setError("Wpisz najpierw, co AI ma narysować.");
+                    setError("Wpisz najpierw, co sztuczna inteligencja ma narysować!");
                     return;
                 }
 
                 setIsGenerating(true);
                 setError(null);
-                setRetryCount(0);
 
-                const complexityInstruction = complexity === 'simple' ? 'very simple, bold thick outlines, minimal details, suitable for kids' : 'highly detailed, fine outlines, intricate, suitable for adults';
-                const enhancedPrompt = `coloring book page, black and white line art, ${prompt}, white background, strictly black lines, no shading, no greyscale, ${complexityInstruction}`;
-
-                try {
-                    const finalImage = await fetchImageFromHuggingFace(enhancedPrompt, 3);
-                    setImage(finalImage);
-                } catch (err) {
-                    setError(err.message);
-                } finally {
-                    setIsGenerating(false);
-                    setRetryCount(0);
-                }
+                // Tworzenie instrukcji dla AI
+                const complexityText = complexity === 'simple' ? 'very simple, thick bold outlines, minimal details, for toddlers' : 'detailed, fine lines, intricate patterns, for adults';
+                const enhancedPrompt = `${prompt}, coloring book page, black and white line art, clean white background, strictly black lines, no shading, no colors, no greyscale, ${complexityText}`;
+                
+                // Używamy losowego ziarna (seed), aby uniknąć zapamiętanych błędów
+                const seed = Math.floor(Math.random() * 999999);
+                
+                // FINALNY LINK (Bez parametru nologo, który powodował błąd 401!)
+                const finalUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(enhancedPrompt)}?width=800&height=1131&seed=${seed}`;
+                
+                setImageUrl(finalUrl);
+                // Ponieważ ładujemy obrazek jako tag <img>, onLoad zajmie się wyłączeniem loadera
             };
 
             const handleDownload = () => {
-                const canvas = canvasRef.current;
-                if (!canvas || !image) return;
+                if (!imageUrl) return;
+                window.open(imageUrl, '_blank');
+                // Alternatywnie, by wymusić pobranie:
                 const link = document.createElement('a');
-                link.download = `kolorowanka-${Date.now()}.png`;
-                link.href = canvas.toDataURL('image/png');
+                link.href = imageUrl;
+                link.download = `kolorowanka-${prompt.substring(0,15)}.jpg`;
                 link.click();
             };
 
             const handlePrint = () => {
-                if (!image) return;
-                const dataUrl = canvasRef.current.toDataURL('image/png');
+                if (!imageUrl) return;
                 const printWindow = window.open('', '_blank');
-                printWindow.document.write(`<html><body><img src="${dataUrl}" style="width:100%"/></body></html>`);
+                printWindow.document.write(`
+                    <html>
+                        <head><title>Drukuj Kolorowankę</title></head>
+                        <body style="margin:0;display:flex;justify-content:center;align-items:center;height:100vh;">
+                            <img src="${imageUrl}" style="max-width:100%;max-height:100vh;" onload="window.print();window.close();" />
+                        </body>
+                    </html>
+                `);
                 printWindow.document.close();
-                printWindow.print();
             };
 
             return (
                 <div className="min-h-screen p-4 md:p-8 max-w-7xl mx-auto flex flex-col md:flex-row gap-8">
-                    <div className="w-full md:w-1/3 flex flex-col gap-5">
+                    
+                    {/* LEWY PANEL - Kontrolki */}
+                    <div className="w-full md:w-1/3 flex flex-col gap-6">
                         <div className="bg-white p-6 rounded-3xl shadow-lg border border-amber-100">
-                            <div className="flex items-center gap-3 mb-6">
-                                <div className="p-3 bg-amber-500 rounded-xl text-white">
+                            <div className="flex items-center gap-3 mb-2">
+                                <div className="p-3 bg-amber-500 rounded-xl text-white shadow-md">
                                     <IconPalette />
                                 </div>
-                                <h1 className="text-2xl font-black text-slate-800">KDP ColorAI</h1>
+                                <h1 className="text-2xl font-black text-slate-800 tracking-tight">KDP ColorAI</h1>
                             </div>
+                            <p className="text-sm text-slate-500 mb-6 font-medium">Darmowy kreator kolorowanek do druku.</p>
 
                             {error && (
-                                <div className="bg-red-50 text-red-600 p-4 rounded-xl text-xs font-bold mb-4 border border-red-100 whitespace-pre-wrap">
-                                    {error}
+                                <div className="bg-red-50 text-red-600 p-3 rounded-xl text-xs font-bold mb-4 border border-red-100">
+                                    ⚠️ {error}
                                 </div>
                             )}
 
-                            <div className="bg-indigo-50 p-4 rounded-xl mb-6">
-                                <label className="text-xs font-bold text-indigo-900 flex items-center gap-2 mb-2 uppercase">
-                                    <IconLock /> Klucz API Hugging Face
-                                </label>
-                                <input 
-                                    type="password" 
-                                    value={hfToken} 
-                                    onChange={saveToken} 
-                                    placeholder="hf_..." 
-                                    className="w-full px-3 py-2 border border-indigo-200 rounded-lg text-sm font-mono shadow-inner"
-                                />
-                                <p className="text-[10px] text-indigo-500 mt-2 leading-tight font-medium">Użyj klucza typu **CLASSIC (Read)** z ustawień Hugging Face.</p>
-                            </div>
-
-                            <div className="space-y-4">
-                                <div>
-                                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Temat kolorowanki</label>
+                            <div className="space-y-5">
+                                <div className="space-y-2">
+                                    <label className="text-xs font-bold text-slate-400 uppercase tracking-widest">Temat rysunku</label>
                                     <textarea 
                                         rows="3"
                                         value={prompt}
                                         onChange={(e) => setPrompt(e.target.value)}
-                                        className="w-full px-4 py-3 border border-slate-200 rounded-xl bg-slate-50 outline-none focus:ring-2 focus:ring-amber-500 mt-1"
-                                        placeholder="np. mały kotek w butach"
+                                        placeholder="np. uroczy kotek śpiący na księżycu"
+                                        className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-amber-500 bg-slate-50 outline-none resize-none"
                                     />
                                 </div>
 
-                                <div className="flex bg-slate-100 p-1 rounded-xl">
-                                    <button onClick={() => setComplexity('simple')} className={`flex-1 py-2 text-xs font-bold rounded-lg ${complexity === 'simple' ? 'bg-white shadow text-amber-600' : 'text-slate-500'}`}>Dzieci</button>
-                                    <button onClick={() => setComplexity('detailed')} className={`flex-1 py-2 text-xs font-bold rounded-lg ${complexity === 'detailed' ? 'bg-white shadow text-amber-600' : 'text-slate-500'}`}>Dorośli</button>
+                                <div className="space-y-2">
+                                    <label className="text-xs font-bold text-slate-400 uppercase tracking-widest">Trudność</label>
+                                    <div className="flex bg-slate-100 p-1 rounded-xl">
+                                        <button 
+                                            onClick={() => setComplexity('simple')}
+                                            className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${complexity === 'simple' ? 'bg-white shadow text-amber-600' : 'text-slate-500'}`}
+                                        >
+                                            Proste
+                                        </button>
+                                        <button 
+                                            onClick={() => setComplexity('detailed')}
+                                            className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${complexity === 'detailed' ? 'bg-white shadow text-amber-600' : 'text-slate-500'}`}
+                                        >
+                                            Detale
+                                        </button>
+                                    </div>
                                 </div>
 
                                 <button 
                                     onClick={generateColoringPage}
                                     disabled={isGenerating || !prompt.trim()}
-                                    className="w-full flex justify-center items-center gap-2 bg-amber-500 hover:bg-amber-600 disabled:bg-slate-300 text-white py-4 rounded-xl font-bold text-lg shadow-lg shadow-amber-500/20"
+                                    className="w-full flex justify-center items-center gap-2 bg-amber-500 hover:bg-amber-600 disabled:bg-slate-300 text-white py-4 rounded-xl font-bold text-lg transition-all shadow-lg shadow-amber-500/30"
                                 >
-                                    {isGenerating ? <><IconLoader /> Tworzenie...</> : "Generuj"}
+                                    {isGenerating ? <><IconLoader /> Tworzenie...</> : "Generuj Kolorowankę"}
                                 </button>
                             </div>
                         </div>
 
+                        {/* MODUŁ NAPIWKÓW */}
                         <div className="bg-slate-800 p-6 rounded-3xl text-white shadow-xl relative overflow-hidden mt-auto">
-                            <h3 className="font-bold mb-2">Postaw mi kawę ☕</h3>
-                            <p className="text-xs text-slate-400 mb-4 font-medium leading-relaxed">Ta aplikacja jest darmowa. Jeśli Ci pomogła, ufunduj mi wirtualną kawę!</p>
-                            <a href="https://buycoffee.to/TWOJA_NAZWA" target="_blank" className="w-full flex items-center justify-center gap-2 bg-[#ffdd00] hover:bg-[#e6c700] text-black py-2.5 rounded-lg font-bold text-sm">
-                                <IconCoffee /> Wyślij napiwek
+                            <h3 className="font-bold text-lg mb-2 relative z-10">Wspieraj projekt!</h3>
+                            <p className="text-sm text-slate-300 mb-4 relative z-10">To narzędzie jest darmowe. Postaw mi wirtualną kawę, jeśli Ci pomogło!</p>
+                            <a 
+                                href="https://buycoffee.to/TWOJA_NAZWA" 
+                                target="_blank"
+                                className="w-full flex items-center justify-center gap-2 bg-[#ffdd00] hover:bg-[#e6c700] text-black py-2.5 rounded-lg font-bold text-sm transition-colors shadow-md"
+                            >
+                                <IconCoffee /> Postaw twórcy kawę
                             </a>
                         </div>
                     </div>
 
+                    {/* PRAWY PANEL - Obrazek */}
                     <div className="w-full md:w-2/3 flex flex-col items-center">
-                        <div className="w-full max-w-lg flex justify-between items-center mb-4">
-                            <h2 className="font-bold text-slate-700">Format A4</h2>
+                        <div className="w-full max-w-lg flex justify-between items-center mb-4 px-2">
+                            <h2 className="font-bold text-slate-700">Podgląd (A4)</h2>
                             <div className="flex gap-2">
-                                <button onClick={handlePrint} disabled={!image} className="px-3 py-1.5 bg-slate-200 rounded-lg text-xs font-bold flex items-center gap-1.5"><IconPrinter /> Drukuj</button>
-                                <button onClick={handleDownload} disabled={!image} className="px-3 py-1.5 bg-amber-500 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-md"><IconDownload /> Pobierz</button>
+                                <button onClick={handlePrint} disabled={!imageUrl} className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-200 hover:bg-slate-300 disabled:opacity-50 text-slate-700 font-bold rounded-lg text-sm transition-colors">
+                                    <IconPrinter /> Drukuj
+                                </button>
+                                <button onClick={handleDownload} disabled={!imageUrl} className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-100 hover:bg-amber-200 disabled:opacity-50 text-amber-800 font-bold rounded-lg text-sm transition-colors shadow-sm">
+                                    <IconDownload /> Pobierz
+                                </button>
                             </div>
                         </div>
 
-                        <div className="relative shadow-2xl rounded-sm border border-slate-200 bg-white" style={{ width: '100%', maxWidth: '500px', aspectRatio: '1 / 1.414' }}>
+                        <div className="relative group shadow-2xl rounded-sm overflow-hidden border border-slate-200 bg-white flex items-center justify-center" style={{ width: '100%', maxWidth: '500px', aspectRatio: '1 / 1.414' }}>
                             {isGenerating && (
-                                <div className="absolute inset-0 z-20 bg-white/90 flex flex-col items-center justify-center text-center p-6">
-                                    <div className="text-amber-500 mb-4 scale-150"><IconLoader /></div>
-                                    <p className="font-bold text-slate-800">Szkicowanie...</p>
-                                    <p className="text-[10px] text-slate-400 mt-2 max-w-[200px]">Darmowy model może potrzebować do 15 sekund na start.</p>
+                                <div className="absolute inset-0 z-20 bg-white/90 flex flex-col items-center justify-center">
+                                    <div className="text-amber-500 mb-3"><IconLoader /></div>
+                                    <p className="font-bold text-slate-800">Sztuczna inteligencja rysuje...</p>
                                 </div>
                             )}
-                            <canvas ref={canvasRef} width={1200} height={1697} className="w-full h-full object-contain"></canvas>
+                            
+                            {imageUrl ? (
+                                <img 
+                                    src={imageUrl} 
+                                    alt="Kolorowanka" 
+                                    className="w-full h-full object-contain" 
+                                    onLoad={() => setIsGenerating(false)}
+                                    onError={() => {
+                                        setError("Serwer AI jest teraz zajęty. Odczekaj chwilę.");
+                                        setIsGenerating(false);
+                                    }}
+                                />
+                            ) : (
+                                <p className="text-slate-400 font-medium text-center px-8 italic">
+                                    Tutaj pojawi się Twoja kolorowanka po kliknięciu przycisku.
+                                </p>
+                            )}
                         </div>
                     </div>
+
                 </div>
             );
         };
