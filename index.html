@@ -37,7 +37,7 @@
             const [error, setError] = useState(null);
 
             const saveToken = (e) => {
-                const val = e.target.value;
+                const val = e.target.value.trim();
                 setHfToken(val);
                 localStorage.setItem('hf_api_token', val);
             };
@@ -72,37 +72,34 @@
                 drawCanvas();
             }, [image]);
 
-            // OFICJALNE POŁĄCZENIE Z HUGGING FACE API (Otwarty model SDXL - brak blokad licencyjnych!)
+            // OFICJALNE POŁĄCZENIE Z HUGGING FACE API (Stabilny model 2.1)
             const fetchImageFromHuggingFace = async (promptText, maxRetries = 2) => {
-                const hfEndpoint = "https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-xl-base-1.0";
+                const hfEndpoint = "https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-2-1";
                 
                 for (let i = 0; i < maxRetries; i++) {
                     setRetryCount(i);
                     try {
                         const response = await fetch(hfEndpoint, {
                             method: "POST",
+                            mode: 'cors', // Wymuszenie trybu CORS
                             headers: {
                                 "Authorization": `Bearer ${hfToken.trim()}`,
                                 "Content-Type": "application/json",
                             },
                             body: JSON.stringify({ 
                                 inputs: promptText,
+                                options: { wait_for_model: true } // Czeka aż darmowy serwer się wybudzi
                             }),
                         });
 
                         if (response.status === 503) {
-                            console.log("Model ładuje się, czekam 10 sekund...");
-                            await new Promise(r => setTimeout(r, 10000));
+                            await new Promise(r => setTimeout(r, 8000));
                             continue;
                         }
 
                         if (!response.ok) {
-                            const errText = await response.text();
-                            console.error("HF Error Details:", errText);
-                            if (response.status === 401 || response.status === 403) {
-                                throw new Error("Klucz API nie ma uprawnień lub jest błędny. Upewnij się, że zaznaczyłeś 'Make calls to the serverless Inference API'.");
-                            }
-                            throw new Error(`Błąd serwera API (Kod: ${response.status})`);
+                            if (response.status === 401) throw new Error("Błędny KLUCZ API. Wygeneruj token typu CLASSIC (Read) na stronie Hugging Face.");
+                            throw new Error(`Serwer AI zajęty (Kod: ${response.status})`);
                         }
 
                         const blob = await response.blob();
@@ -111,17 +108,16 @@
                         const img = new Image();
                         await new Promise((resolve, reject) => {
                             img.onload = () => resolve(img);
-                            img.onerror = () => reject(new Error("Błąd podczas renderowania obrazka"));
+                            img.onerror = () => reject(new Error("Błąd wyświetlania obrazka"));
                             img.src = objectUrl;
                         });
 
                         return img; 
 
                     } catch (err) {
-                        if (err.message === "Failed to fetch" || err.message.includes("NetworkError")) {
-                            throw new Error("Wystąpił błąd połączenia (Failed to fetch). Upewnij się, że klucz zaczyna się od 'hf_' i nie ma w nim spacji.");
+                        if (err.message === "Failed to fetch") {
+                            throw new Error("PRZEGLĄDARKA BLOKUJE POŁĄCZENIE. \n1. Wyłącz AdBlocka. \n2. Upewnij się, że używasz klucza CLASSIC.");
                         }
-                        
                         if (i === maxRetries - 1) throw err; 
                         await new Promise(res => setTimeout(res, 3000));
                     }
@@ -130,11 +126,11 @@
 
             const generateColoringPage = async () => {
                 if (!hfToken || !hfToken.startsWith('hf_')) {
-                    setError("Wklej poprawny darmowy klucz Hugging Face (powinien zaczynać się od hf_...)");
+                    setError("Wklej darmowy klucz Hugging Face (zaczyna się od hf_...)");
                     return;
                 }
                 if (!prompt.trim()) {
-                    setError("Wpisz najpierw, co sztuczna inteligencja ma narysować!");
+                    setError("Wpisz najpierw, co AI ma narysować.");
                     return;
                 }
 
@@ -142,15 +138,14 @@
                 setError(null);
                 setRetryCount(0);
 
-                // PROMPT DLA SDXL
-                const complexityInstruction = complexity === 'simple' ? 'very simple, thick bold outlines, minimal details, suitable for kids coloring book' : 'highly detailed, fine thin outlines, intricate patterns, suitable for adult coloring book';
-                const enhancedPrompt = `black and white line art coloring page, no shading, strict white background, clean black outlines, ${complexityInstruction}, ${prompt}`;
+                const complexityInstruction = complexity === 'simple' ? 'very simple, bold thick outlines, minimal details, suitable for kids' : 'highly detailed, fine outlines, intricate, suitable for adults';
+                const enhancedPrompt = `coloring book page, black and white line art, ${prompt}, white background, strictly black lines, no shading, no greyscale, ${complexityInstruction}`;
 
                 try {
                     const finalImage = await fetchImageFromHuggingFace(enhancedPrompt, 3);
                     setImage(finalImage);
                 } catch (err) {
-                    setError(err.message || "Błąd generowania. Spróbuj ponownie.");
+                    setError(err.message);
                 } finally {
                     setIsGenerating(false);
                     setRetryCount(0);
@@ -159,157 +154,109 @@
 
             const handleDownload = () => {
                 const canvas = canvasRef.current;
-                if (!canvas || !image) {
-                    setError("Wygeneruj obrazek przed pobraniem.");
-                    return;
-                }
-                const dataUrl = canvas.toDataURL('image/png');
+                if (!canvas || !image) return;
                 const link = document.createElement('a');
-                link.download = `kolorowanka-${prompt.replace(/\s+/g, '-').toLowerCase().substring(0, 15)}.png`;
-                link.href = dataUrl;
-                document.body.appendChild(link);
+                link.download = `kolorowanka-${Date.now()}.png`;
+                link.href = canvas.toDataURL('image/png');
                 link.click();
-                document.body.removeChild(link);
             };
 
             const handlePrint = () => {
-                if (!image) {
-                    setError("Wygeneruj obrazek przed drukiem.");
-                    return;
-                }
+                if (!image) return;
                 const dataUrl = canvasRef.current.toDataURL('image/png');
                 const printWindow = window.open('', '_blank');
-                printWindow.document.write(`
-                    <html>
-                        <head><title>Drukuj Kolorowankę</title></head>
-                        <body style="margin:0;display:flex;justify-content:center;align-items:center;height:100vh;">
-                            <img src="${dataUrl}" style="max-width:100%;max-height:100vh;"/>
-                        </body>
-                    </html>
-                `);
+                printWindow.document.write(`<html><body><img src="${dataUrl}" style="width:100%"/></body></html>`);
                 printWindow.document.close();
-                printWindow.focus();
-                setTimeout(() => {
-                    printWindow.print();
-                    printWindow.close();
-                }, 250);
+                printWindow.print();
             };
 
             return (
                 <div className="min-h-screen p-4 md:p-8 max-w-7xl mx-auto flex flex-col md:flex-row gap-8">
-                    
-                    {/* LEWY PANEL - Kontrolki */}
                     <div className="w-full md:w-1/3 flex flex-col gap-5">
                         <div className="bg-white p-6 rounded-3xl shadow-lg border border-amber-100">
-                            <div className="flex items-center gap-3 mb-2">
-                                <div className="p-3 bg-amber-500 rounded-xl text-white shadow-md">
+                            <div className="flex items-center gap-3 mb-6">
+                                <div className="p-3 bg-amber-500 rounded-xl text-white">
                                     <IconPalette />
                                 </div>
-                                <h1 className="text-2xl font-black text-slate-800 tracking-tight">KDP ColorAI</h1>
+                                <h1 className="text-2xl font-black text-slate-800">KDP ColorAI</h1>
                             </div>
-                            <p className="text-sm text-slate-500 mb-6 font-medium">Potężny kreator napędzany darmowym modelem SDXL.</p>
 
                             {error && (
-                                <div className="bg-red-50 text-red-600 p-4 rounded-xl text-sm font-medium mb-4 flex items-start gap-2 border border-red-100 shadow-sm whitespace-pre-wrap">
-                                    <span className="text-lg mt-0.5">⚠️</span> <span className="flex-1 leading-relaxed">{error}</span>
+                                <div className="bg-red-50 text-red-600 p-4 rounded-xl text-xs font-bold mb-4 border border-red-100 whitespace-pre-wrap">
+                                    {error}
                                 </div>
                             )}
 
-                            {/* POLE NA KLUCZ HUGGING FACE */}
-                            <div className="bg-indigo-50 border border-indigo-200 p-4 rounded-xl flex flex-col items-start gap-2 mb-6 shadow-inner">
-                                <div className="flex items-center gap-2 text-indigo-800">
-                                    <IconLock />
-                                    <span className="text-sm font-bold">Klucz API (Hugging Face):</span>
-                                </div>
+                            <div className="bg-indigo-50 p-4 rounded-xl mb-6">
+                                <label className="text-xs font-bold text-indigo-900 flex items-center gap-2 mb-2 uppercase">
+                                    <IconLock /> Klucz API Hugging Face
+                                </label>
                                 <input 
                                     type="password" 
                                     value={hfToken} 
                                     onChange={saveToken} 
-                                    placeholder="Wklej darmowy klucz hf_..." 
-                                    className="w-full px-4 py-2 border border-indigo-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-indigo-500 font-mono bg-white shadow-sm"
+                                    placeholder="hf_..." 
+                                    className="w-full px-3 py-2 border border-indigo-200 rounded-lg text-sm font-mono shadow-inner"
                                 />
-                                <div className="text-[11px] text-indigo-700 mt-1 space-y-1">
-                                    <p>Utworzyłeś klucz "Fine-grained" z opcją Wnioskowania. Jesteś gotowy do pracy!</p>
-                                </div>
+                                <p className="text-[10px] text-indigo-500 mt-2 leading-tight font-medium">Użyj klucza typu **CLASSIC (Read)** z ustawień Hugging Face.</p>
                             </div>
 
-                            <div className="space-y-5">
-                                <div className="space-y-2">
-                                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Co chcesz narysować?</label>
+                            <div className="space-y-4">
+                                <div>
+                                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Temat kolorowanki</label>
                                     <textarea 
                                         rows="3"
                                         value={prompt}
                                         onChange={(e) => setPrompt(e.target.value)}
-                                        placeholder="np. mały dinozaur bawiący się piłką"
-                                        className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-amber-500 bg-slate-50 outline-none resize-none shadow-inner"
+                                        className="w-full px-4 py-3 border border-slate-200 rounded-xl bg-slate-50 outline-none focus:ring-2 focus:ring-amber-500 mt-1"
+                                        placeholder="np. mały kotek w butach"
                                     />
                                 </div>
 
-                                <div className="space-y-2">
-                                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Poziom skomplikowania</label>
-                                    <div className="flex bg-slate-100 p-1 rounded-xl">
-                                        <button 
-                                            onClick={() => setComplexity('simple')}
-                                            className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all ${complexity === 'simple' ? 'bg-white shadow text-amber-600' : 'text-slate-500 hover:text-slate-700'}`}
-                                        >
-                                            Dla Dzieci (Proste)
-                                        </button>
-                                        <button 
-                                            onClick={() => setComplexity('detailed')}
-                                            className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all ${complexity === 'detailed' ? 'bg-white shadow text-amber-600' : 'text-slate-500 hover:text-slate-700'}`}
-                                        >
-                                            Dla Dorosłych (Detale)
-                                        </button>
-                                    </div>
+                                <div className="flex bg-slate-100 p-1 rounded-xl">
+                                    <button onClick={() => setComplexity('simple')} className={`flex-1 py-2 text-xs font-bold rounded-lg ${complexity === 'simple' ? 'bg-white shadow text-amber-600' : 'text-slate-500'}`}>Dzieci</button>
+                                    <button onClick={() => setComplexity('detailed')} className={`flex-1 py-2 text-xs font-bold rounded-lg ${complexity === 'detailed' ? 'bg-white shadow text-amber-600' : 'text-slate-500'}`}>Dorośli</button>
                                 </div>
 
                                 <button 
                                     onClick={generateColoringPage}
-                                    disabled={isGenerating || !prompt.trim() || !hfToken}
-                                    className="w-full flex justify-center items-center gap-2 bg-amber-500 hover:bg-amber-600 disabled:bg-slate-300 text-white py-4 rounded-xl font-bold text-lg transition-all shadow-lg shadow-amber-500/30"
+                                    disabled={isGenerating || !prompt.trim()}
+                                    className="w-full flex justify-center items-center gap-2 bg-amber-500 hover:bg-amber-600 disabled:bg-slate-300 text-white py-4 rounded-xl font-bold text-lg shadow-lg shadow-amber-500/20"
                                 >
-                                    {isGenerating ? <><IconLoader /> Tworzenie...</> : "Generuj Kolorowankę"}
+                                    {isGenerating ? <><IconLoader /> Tworzenie...</> : "Generuj"}
                                 </button>
                             </div>
+                        </div>
+
+                        <div className="bg-slate-800 p-6 rounded-3xl text-white shadow-xl relative overflow-hidden mt-auto">
+                            <h3 className="font-bold mb-2">Postaw mi kawę ☕</h3>
+                            <p className="text-xs text-slate-400 mb-4 font-medium leading-relaxed">Ta aplikacja jest darmowa. Jeśli Ci pomogła, ufunduj mi wirtualną kawę!</p>
+                            <a href="https://buycoffee.to/TWOJA_NAZWA" target="_blank" className="w-full flex items-center justify-center gap-2 bg-[#ffdd00] hover:bg-[#e6c700] text-black py-2.5 rounded-lg font-bold text-sm">
+                                <IconCoffee /> Wyślij napiwek
+                            </a>
                         </div>
                     </div>
 
-                    {/* PRAWY PANEL - Płótno A4 */}
                     <div className="w-full md:w-2/3 flex flex-col items-center">
-                        <div className="w-full max-w-lg flex justify-between items-center mb-4 px-2">
-                            <h2 className="font-bold text-slate-700">Podgląd (Proporcje A4)</h2>
+                        <div className="w-full max-w-lg flex justify-between items-center mb-4">
+                            <h2 className="font-bold text-slate-700">Format A4</h2>
                             <div className="flex gap-2">
-                                <button onClick={handlePrint} disabled={!image} className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-200 hover:bg-slate-300 disabled:opacity-50 text-slate-700 font-bold rounded-lg text-sm transition-colors">
-                                    <IconPrinter /> Drukuj
-                                </button>
-                                <button onClick={handleDownload} disabled={!image} className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-500 hover:bg-amber-600 disabled:bg-amber-200 disabled:text-amber-50 text-white font-bold rounded-lg text-sm transition-colors shadow-md shadow-amber-500/30">
-                                    <IconDownload /> Pobierz
-                                </button>
+                                <button onClick={handlePrint} disabled={!image} className="px-3 py-1.5 bg-slate-200 rounded-lg text-xs font-bold flex items-center gap-1.5"><IconPrinter /> Drukuj</button>
+                                <button onClick={handleDownload} disabled={!image} className="px-3 py-1.5 bg-amber-500 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-md"><IconDownload /> Pobierz</button>
                             </div>
                         </div>
 
-                        {/* Płótno Canvas */}
-                        <div className="relative group shadow-2xl rounded-sm overflow-hidden border border-slate-200 bg-white" style={{ width: '100%', maxWidth: '500px', aspectRatio: '1 / 1.414' }}>
+                        <div className="relative shadow-2xl rounded-sm border border-slate-200 bg-white" style={{ width: '100%', maxWidth: '500px', aspectRatio: '1 / 1.414' }}>
                             {isGenerating && (
-                                <div className="absolute inset-0 z-20 bg-white/95 flex flex-col items-center justify-center">
-                                    <div className="text-amber-500 mb-3"><IconLoader /></div>
-                                    <p className="font-bold text-slate-800 text-center">Inicjowanie SDXL...</p>
-                                    {retryCount > 0 ? (
-                                        <p className="text-xs text-amber-600 mt-2 font-bold px-4 text-center">Darmowy model się wybudza (może zająć do 30 sek)...</p>
-                                    ) : (
-                                        <p className="text-xs text-slate-500 mt-1">Nanoszenie tuszu na płótno</p>
-                                    )}
+                                <div className="absolute inset-0 z-20 bg-white/90 flex flex-col items-center justify-center text-center p-6">
+                                    <div className="text-amber-500 mb-4 scale-150"><IconLoader /></div>
+                                    <p className="font-bold text-slate-800">Szkicowanie...</p>
+                                    <p className="text-[10px] text-slate-400 mt-2 max-w-[200px]">Darmowy model może potrzebować do 15 sekund na start.</p>
                                 </div>
                             )}
-                            <canvas 
-                                ref={canvasRef} 
-                                width={1200} 
-                                height={1697} 
-                                className="w-full h-full object-contain"
-                            ></canvas>
+                            <canvas ref={canvasRef} width={1200} height={1697} className="w-full h-full object-contain"></canvas>
                         </div>
                     </div>
-
                 </div>
             );
         };
